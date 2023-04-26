@@ -1,20 +1,22 @@
-from flask import Flask, request, jsonify, render_template, url_for
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_sse import sse
 import openai
 import re
 import traceback
-from werkzeug.utils import secure_filename
+from flask import render_template
 import pdfplumber
+from werkzeug.utils import secure_filename
+import io
 import os
+import pypdfium2 as pdfium 
+import pytesseract 
+import cv2
 from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 CORS(app)
-app.config["REDIS_URL"] = "redis://localhost"  # Change this according to your Redis setup
-app.register_blueprint(sse, url_prefix='/stream')
 
-openai.api_key = "your-api-key-here"
+openai.api_key = "your open AI key here"
 
 def split_text(text, max_length):
     words = text.split(' ')
@@ -57,24 +59,24 @@ def process_text(full_prompt):
 def process_transcript():
     try:
         transcript = request.json['transcript']
-        prompt = request.json['gptPrompt']
+        prompt = request.json['gptPrompt'] 
 
-        max_length = 3500
+        # Split the transcript into smaller chunks
+        max_length = 3500  # Adjust this value based on the token limit
         transcript_chunks = split_text(transcript, max_length)
 
-        total_chunks = len(transcript_chunks)
-        for index, chunk in enumerate(transcript_chunks):
+        processed_chunks = []
+        for chunk in transcript_chunks:
             full_prompt = f"\n\nPrompt: {prompt}\n\nUploaded Material:\n\n{chunk}"
+
             organized_chunk = process_text(full_prompt)
+            processed_chunks.append(organized_chunk)
 
-            message = {
-                "chunk": organized_chunk,
-                "current": index + 1,
-                "total": total_chunks
-            }
-            sse.publish(message, type="update")
+        # Merge the processed chunks
+        organized_text = ' '.join(processed_chunks)
 
-        return jsonify({"result": "done"})
+        result = {"processed_text": organized_text}
+        return jsonify(result)
     except Exception as e:
         traceback.print_exc()
         print(e)

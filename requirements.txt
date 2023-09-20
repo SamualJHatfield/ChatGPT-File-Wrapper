@@ -1,5 +1,11 @@
-Flask
-flask-cors
-flask-sse
+flask
+flask_cors
 openai
+traceback
+os
+re
 PyPDF2
+pptx 
+werkzeug.utils
+pptx.util
+time

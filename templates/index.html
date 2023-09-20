@@ -8,7 +8,8 @@
 </head>
 <body>
     <h1>Medical Lecture Transcript Processor</h1>
-    <input type="file" id="pdfFile" accept="application/pdf" />
+    <input type="file" id="pdfFile" accept="application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+
     <button id="uploadPdfBtn">Upload PDF</button>
     <br><br>
     <textarea id="transcript" rows="10" cols="80" placeholder="Enter the lecture transcript"></textarea>
@@ -110,7 +111,7 @@
             formData.append('file', pdfFile);
 
             $.ajax({
-                url: '{{ url_for("upload_pdf") }}',
+                url: '{{ url_for("upload_file") }}',
                 type: 'POST',
                 data: formData,
                 processData: false,

@@ -1,11 +1,9 @@
 flask
-flask_cors
+flask-cors
 openai
-traceback
-os
-re
 PyPDF2
-pptx 
-werkzeug.utils
-pptx.util
-time
+python-pptx
+Werkzeug
+PyMuPDF
+Pillow
+

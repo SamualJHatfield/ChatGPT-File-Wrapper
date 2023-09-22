@@ -9,7 +9,6 @@
 <body>
     <h1>Medical Lecture Transcript Processor</h1>
     <input type="file" id="pdfFile" accept="application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation" />
-
     <button id="uploadPdfBtn">Upload PDF</button>
     <br><br>
     <textarea id="transcript" rows="10" cols="80" placeholder="Enter the lecture transcript"></textarea>
@@ -18,6 +17,7 @@
     <button id="startBtn">Start Recording</button>
     <button id="stopBtn" disabled>Stop Recording</button>
     <button id="process-btn">Process Transcript</button>
+    <button id="practice-questions-btn">Generate Practice Questions</button>  <!-- New Button -->
     <h2>Processed Text:</h2>
     <div id="result"></div>
     <p id="status"></p> 
@@ -129,8 +129,34 @@
                 }
             });
         });
+
+        // New AJAX call for generating practice questions
+        $('#practice-questions-btn').on('click', function() {
+            const transcript = $('#transcript').val();
+            $.ajax({
+                url: '{{ url_for("process_practice_questions") }}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({transcript: transcript}),
+                success: function(response) {
+                    if (response.error) {
+                        alert('Error generating practice questions: ' + response.error);
+                    } else {
+                        const blob = new Blob([response]);
+                        const link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = 'generated_pptx.pptx';
+                        link.click();
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('Error generating practice questions:', textStatus, errorThrown);
+                    alert('Error generating practice questions.');
+                }
+            });
+        });
+
     </script>
 </body>
 </html>
-
 

@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your open ai key here"
+openai.api_key = "your api key here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -40,7 +40,7 @@ def convert_pdf_to_images(pdf_path):
         os.remove(temp_file_name)  # Delete the temporary file
     return images
 
-def generate_pptx(processed_chunks, original_chunks, file_path):
+def generate_pptx(processed_chunks, original_chunks, file_path, output_filename):
     prs = Presentation()
     prs.slide_width = Inches(8.5)  # Set width
     prs.slide_height = Inches(11)  # Set height
@@ -105,8 +105,7 @@ def generate_pptx(processed_chunks, original_chunks, file_path):
     height = Inches(11)  # setting height to maintain aspect ratio
     pic = slide.shapes.add_picture(image_path, left, top, height=height)
 
-    prs.save("generated_presentation.pptx")
-
+    prs.save(output_filename)
 
 
 
@@ -179,9 +178,11 @@ def process_practice_questions():
             organized_chunk = process_text(full_prompt)
             processed_chunks.append(organized_chunk)
 
-        generate_pptx(processed_chunks, transcript_chunks, file_path)
-        
-        return send_file('generated_presentation.pptx', as_attachment=True, download_name='generated_presentation.pptx')
+        original_filename = os.path.basename(file_path).rsplit('.', 1)[0]  # Extract name without extension
+        output_filename = f"{original_filename} practice questions.pptx"
+        generate_pptx(processed_chunks, transcript_chunks, file_path, output_filename)
+        return "File Saved"
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

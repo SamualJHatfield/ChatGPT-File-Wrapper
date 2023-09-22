@@ -223,6 +223,19 @@ def extract_text_from_pptx(file_path):
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
     global file_path  # Indicate that we're using the global file_path variable
+
+    # Clear everything in the uploads folder
+    folder = app.config['UPLOAD_FOLDER']
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
+
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     file = request.files['file']
@@ -231,9 +244,9 @@ def upload_file():
     if not allowed_file(file.filename):
         return jsonify({"error": "File type not allowed"}), 400
     filename = secure_filename(file.filename)
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    file.save(os.path.join(folder, filename))
 
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)  # Assign to global file_path
+    file_path = os.path.join(folder, filename)  # Assign to global file_path
     file_extension = filename.rsplit('.', 1)[1].lower()
 
     if file_extension == 'pdf':

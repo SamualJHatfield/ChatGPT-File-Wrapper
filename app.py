@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your api key here"
+openai.api_key = "Your API key here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -65,47 +65,63 @@ def generate_pptx(processed_chunks, original_chunks, file_path, output_filename)
         print(f"Questions with Answers:\n{questions_with_answers}\n")  # Debug print
         print(f"Explanations with Correct Answers:\n{explanations_with_correct_answers}\n")  # Debug print
 
-    for idx, ((q, a), e) in enumerate(zip(questions_with_answers, explanations_with_correct_answers)):
-        # Create slides
-        slide_layout = prs.slide_layouts[1]
+        # This loop should be inside the loop over processed_chunks
+        for idx, ((q, a), e) in enumerate(zip(questions_with_answers, explanations_with_correct_answers)):
+            # Create slides
+            slide_layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(slide_layout)
+            title = slide.shapes.title
+            content = slide.placeholders[1]
+            title.text = f"Slide {i+1}-{idx+1} - Question"
+            content.text = f"{q.strip()}\nAnswer Choices:{a.strip()}"
+            content.top = Inches(1.5)
+            content.width = Inches(7.5)
+            content.height = Inches(8)
+            for paragraph in content.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(24)
+
+            slide_layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(slide_layout)
+            title = slide.shapes.title
+            content = slide.placeholders[1]
+            title.text = f"Slide {i+1}-{idx+1} - Answer"
+            content.text = f"{e.strip()}"
+            content.top = Inches(1.5)
+            content.width = Inches(7.5)
+            content.height = Inches(8)
+            for paragraph in content.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(20)
+
+        # Image handling code should also be inside the loop over processed_chunks
+        image = images[i]  # assuming each processed_chunk corresponds to a page
+        image_path = f'temp_page_{i}.png'
+        image.save(image_path)
+
+        slide_layout = prs.slide_layouts[5]  # use the blank slide layout
         slide = prs.slides.add_slide(slide_layout)
-        title = slide.shapes.title
-        content = slide.placeholders[1]
-        title.text = f"Slide {i+1}-{idx+1} - Question"
-        content.text = f"{q.strip()}\nAnswer Choices:{a.strip()}"
-        content.top = Inches(1.5)
-        content.width = Inches(7.5)
-        content.height = Inches(8)
-        for paragraph in content.text_frame.paragraphs:
-            for run in paragraph.runs:
-                run.font.size = Pt(24)
 
-        slide_layout = prs.slide_layouts[1]
-        slide = prs.slides.add_slide(slide_layout)
-        title = slide.shapes.title
-        content = slide.placeholders[1]
-        title.text = f"Slide {i+1}-{idx+1} - Answer"
-        content.text = f"{e.strip()}"
-        content.top = Inches(1.5)
-        content.width = Inches(7.5)
-        content.height = Inches(8)
-        for paragraph in content.text_frame.paragraphs:
-            for run in paragraph.runs:
-                run.font.size = Pt(24)
-
-    image = images[i]  # assuming each processed_chunk corresponds to a page
-    image_path = f'temp_page_{i}.png'
-    image.save(image_path)
-
-    slide_layout = prs.slide_layouts[5]  # use the blank slide layout
-    slide = prs.slides.add_slide(slide_layout)
-
-    left = Inches(0)
-    top = Inches(0)
-    height = Inches(11)  # setting height to maintain aspect ratio
-    pic = slide.shapes.add_picture(image_path, left, top, height=height)
+        left = Inches(0)
+        top = Inches(0)
+        height = Inches(11)  # setting height to maintain aspect ratio
+        pic = slide.shapes.add_picture(image_path, left, top, height=height)
 
     prs.save(output_filename)
+    
+    # Get the directory of the saved PowerPoint file
+    output_dir = os.path.dirname(os.path.abspath(output_filename))
+    
+    # Iterate through all files in the output directory
+    for filename in os.listdir(output_dir):
+        # Check if the file is a temporary image file (by checking its name pattern)
+        if filename.startswith('temp_page_') and filename.endswith('.png'):
+            # Get the full path of the file
+            file_path = os.path.join(output_dir, filename)
+            
+            # Delete the file
+            os.remove(file_path)
+
 
 
 
@@ -173,7 +189,35 @@ def process_practice_questions():
 
         processed_chunks = []
         for chunk in transcript_chunks:
-            full_prompt = f'Prompt: "Please create case-based practice questions focusing on pathogenesis, clinical features and treatment of a disease. The question should be based on the specific slide details provided (don\'t reference the slide or images). The answer choices should delve into the mentioned mutations, specific treatments, or distinct pathogenic and clinical features from the slide.\n\n(Question: [Question]\nAnswer Choices: [A-E]\nCorrect answer: {{correct answer}}\nExplanation: [Explanation])\n\nBelow please find an example of the style of question and explanation which should be asked:\n\nExample:\n\n(Question:\nA 35-year-old man presents to your clinic with new onset right foot drop (an inability to dorsiflect or extend his foot). His past medical history is significant for a longstanding history of asthma. His chest x-ray shows bilateral infiltrates. Which of the following pathologic features are you most likely to see on nerve biopsy?\nAnswer Choices:\nA Eosinophilic infiltration \nB Giant cells \nC IgA deposition \nD Follicular plugging \nCorrect answer: A Eosinophilic Infiltration\nExplanation:\nThis patient presents with Eosinophilic Granulomatous Polyangiitis (formerly known as Churg-Strauss). The American College of Rheumatology criteria include a history of asthma, peripheral eosinophilia, neuropathy, pulmonary infiltrates, sinus abnormalities and a biopsy demonstrating vasculitis and eosinophils (option A). Giant cells (option B) may be seen in giant cell arteritis, whereas IgA deposition (option C) would be seen in Henoch-Schonlein purpura. Follicular plugging (option D) can be seen in discoid lupus.)\n\nExplanations should state why the correct response is correct, as well as the specific reason why the incorrect answers are incorrect. If the explanation does not fully convey the context of everything important on the slide, please also include that context."\nUploaded Material: {chunk}'
+            full_prompt = f'''Prompt: "Please create a case-based practice question focusing on pathogenesis and treatment of a disease. The question should be based on the slide details provided (don't reference the slide or images). The answer choices should delve into the mentioned mutations, specific treatments, or distinct pathogenic features from the slide. 
+
+Your response should use the following format:
+
+Question: [Question]
+Answer Choices: [A-E]
+Correct answer: [correct answer]
+Explanation: [Explanation]
+
+Below please find an example of the style of question and explanation which should be asked:
+
+Example:
+
+Question:
+A 35-year-old woman presents with joint pain for 3 months. This started first in her right 1-3 MCPs, then developed consecutively in the left 2nd & 3rd MCPs and bilateral 4th and 5th MTPs. Pain is worse in the mornings, improves with use, and is associated with 1.5 hours of morning stiffness. Her exam shows swelling in the affected joints. What is the clinical pattern of her joint complaints?
+
+Answer Choices:
+A Acute non-inflammatory symmetric polyarthritis of small and large joints 
+B Chronic inflammatory symmetric polyarthritis of small joints 
+C Acute inflammatory asymmetric oligoarthritis of small joints 
+D Chronic non-inflammatory symmetric polyarthritis of small joints 
+E Chronic non-inflammatory symmetric oligoarthritis of small joints 
+
+Correct answer: B Chronic inflammatory symmetric polyarthritis of small joints
+
+Explanation: 
+This patient has a chronic presentation (> 6 weeks) of a symmetric (affects MCPs and MTPs on both sides of the body) polyarthritis (> 5 joints) affecting the small joints of the hands and feet (MCPs and MTPs). It is inflammatory since morning stiffness is > 1 hour. Therefore, option B is correct. She may have rheumatoid arthritis or one of its mimickers. Options D and E are incorrect due to the duration of morning stiffness. Duration of 3 months makes options A and C incorrect - acute is usually hours to days of symptoms at presentation. Options C and E are also incorrect due to the number of joints involved (oligoarthritis = 2-4 joints).
+
+Explanations should state why the correct response is correct, as well as the specific reason why the incorrect answers are incorrect. Avoid stating "These options are incorrect as they do not match the description" or other things of that nature"\nUploaded Material: {chunk}'''
 
             organized_chunk = process_text(full_prompt)
             processed_chunks.append(organized_chunk)

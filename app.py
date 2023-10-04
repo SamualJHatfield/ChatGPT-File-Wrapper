@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "Your API key here"
+openai.api_key = "your api key here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -189,7 +189,7 @@ def process_practice_questions():
 
         processed_chunks = []
         for chunk in transcript_chunks:
-            full_prompt = f'''Prompt: "Please create a case-based practice question focusing on pathogenesis and treatment of a disease. The question should be based on the slide details provided (don't reference the slide or images). The answer choices should delve into the mentioned mutations, specific treatments, or distinct pathogenic features from the slide. 
+            full_prompt = f'''Prompt: " Please create a case-based practice question for a medical school exam. The question should be based on the slide details provided (don't reference the slide or images). The answer choices should delve into the mentioned mutations, imaging, hitologic findings, specific treatments, pharmacology, or distinct pathogenic/clinical features from the slide.  
 
 Your response should use the following format:
 

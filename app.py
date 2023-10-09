@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your api key here"
+openai.api_key = "your API key here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -40,43 +40,49 @@ def convert_pdf_to_images(pdf_path):
         os.remove(temp_file_name)  # Delete the temporary file
     return images
 
-def generate_pptx(processed_chunks, original_chunks, file_path, output_filename):
+def generate_pptx(processed_chunks, valid_images, output_filename):
+
     prs = Presentation()
-    prs.slide_width = Inches(8.5)  # Set width
-    prs.slide_height = Inches(11)  # Set height
-    images = convert_pdf_to_images(file_path)  # convert all pdf pages to images
+    prs.slide_width = Inches(8.5)
+    prs.slide_height = Inches(11)
+    
+    images = convert_pdf_to_images(file_path)  # Convert all PDF pages to images
     print(file_path)
 
     for i, processed_chunk in enumerate(processed_chunks):
         print(f"Processed chunk {i}:\n{processed_chunk}\n")  # Debug print
 
         # Updated regular expressions
-        questions_with_answers = re.findall(r"Question([\s\S]+?)Answer Choices:([\s\S]+?)Correct answer:", processed_chunk)
-        explanations = re.findall(r"Explanation:([\s\S]+?)(Question|$)", processed_chunk)
-        correct_answers = re.findall(r"Correct answer: ([^\n]+)", processed_chunk)
+        questions_with_answers = re.findall(r"Question:([\s\S]+?)Correct Answer:", processed_chunk, re.I)
+        explanations = re.findall(r"Explanation:([\s\S]+?)(?=Question:|$)", processed_chunk, re.I)
+        correct_answers = re.findall(r"Correct Answer:\s*([^\n]+)", processed_chunk, re.I)
 
         # Combine the correct answers with explanations
         explanations_with_correct_answers = []
-        for idx, (exp, _) in enumerate(explanations):
+        for idx, exp in enumerate(explanations):
             correct_answer = f"Correct Answer: {correct_answers[idx]}\n" if idx < len(correct_answers) else ""
             updated_exp = correct_answer + "Explanation: " + exp.strip()
+            explanations = re.findall(r"Explanation:([\s\S]+)$", processed_chunk, re.I)
             explanations_with_correct_answers.append(updated_exp)
 
         print(f"Questions with Answers:\n{questions_with_answers}\n")  # Debug print
         print(f"Explanations with Correct Answers:\n{explanations_with_correct_answers}\n")  # Debug print
 
         # This loop should be inside the loop over processed_chunks
-        for idx, ((q, a), e) in enumerate(zip(questions_with_answers, explanations_with_correct_answers)):
+        for idx, (qa, e) in enumerate(zip(questions_with_answers, explanations_with_correct_answers)):
             # Create slides
             slide_layout = prs.slide_layouts[1]
             slide = prs.slides.add_slide(slide_layout)
             title = slide.shapes.title
             content = slide.placeholders[1]
-            title.text = f"Slide {i+1}-{idx+1} - Question"
-            content.text = f"{q.strip()}\nAnswer Choices:{a.strip()}"
+            title.text = f"Slide {i + 1}-{idx + 1} - Question"
+            content.text = qa.strip()
+            
+            # Adjust the content position and size
             content.top = Inches(1.5)
             content.width = Inches(7.5)
             content.height = Inches(8)
+
             for paragraph in content.text_frame.paragraphs:
                 for run in paragraph.runs:
                     run.font.size = Pt(24)
@@ -85,43 +91,33 @@ def generate_pptx(processed_chunks, original_chunks, file_path, output_filename)
             slide = prs.slides.add_slide(slide_layout)
             title = slide.shapes.title
             content = slide.placeholders[1]
-            title.text = f"Slide {i+1}-{idx+1} - Answer"
+            title.text = f"Slide {i + 1}-{idx + 1} - Answer"
             content.text = f"{e.strip()}"
+            
+            # Adjust the content position and size
             content.top = Inches(1.5)
             content.width = Inches(7.5)
             content.height = Inches(8)
+
             for paragraph in content.text_frame.paragraphs:
                 for run in paragraph.runs:
                     run.font.size = Pt(20)
 
-        # Image handling code should also be inside the loop over processed_chunks
-        image = images[i]  # assuming each processed_chunk corresponds to a page
+        # Handle image addition
+        image = valid_images[i]
         image_path = f'temp_page_{i}.png'
         image.save(image_path)
-
-        slide_layout = prs.slide_layouts[5]  # use the blank slide layout
+        slide_layout = prs.slide_layouts[5]  # Use the blank slide layout
         slide = prs.slides.add_slide(slide_layout)
-
-        left = Inches(0)
-        top = Inches(0)
-        height = Inches(11)  # setting height to maintain aspect ratio
-        pic = slide.shapes.add_picture(image_path, left, top, height=height)
+        slide.shapes.add_picture(image_path, Inches(0), Inches(0), height=Inches(11))
 
     prs.save(output_filename)
     
-    # Get the directory of the saved PowerPoint file
+    # Clean up temporary images
     output_dir = os.path.dirname(os.path.abspath(output_filename))
-    
-    # Iterate through all files in the output directory
     for filename in os.listdir(output_dir):
-        # Check if the file is a temporary image file (by checking its name pattern)
         if filename.startswith('temp_page_') and filename.endswith('.png'):
-            # Get the full path of the file
-            file_path = os.path.join(output_dir, filename)
-            
-            # Delete the file
-            os.remove(file_path)
-
+            os.remove(os.path.join(output_dir, filename))
 
 
 
@@ -142,7 +138,7 @@ def process_text(full_prompt):
             }
 
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4",
                 messages=[system_message, user_message],
                 max_tokens=2000,
                 n=1,
@@ -187,49 +183,68 @@ def process_practice_questions():
         transcript = request.json['transcript']
         transcript_chunks = split_text_by_separator(transcript)
 
-        processed_chunks = []
-        for chunk in transcript_chunks:
-            full_prompt = f'''Prompt: " Please create a case-based practice question for a medical school exam. The question should be based on the slide details provided (don't reference the slide or images). The answer choices should delve into the mentioned mutations, imaging, hitologic findings, specific treatments, pharmacology, or distinct pathogenic/clinical features from the slide.  
+        undesired_words = ["outline", "objectives", "objective", "key", "take-home points", "take home", "takeaway","takeaways", "questions", "title", "abbreviations", "acronyms", "disclosure", "disclosures","case", "keyword", "points", "abbreviations/acronyms"]
 
-Your response should use the following format:
+        pattern = re.compile(r'\b(case|patient)\s*\d+\b', re.IGNORECASE)
+
+        valid_chunks = []
+        images = convert_pdf_to_images(file_path)
+
+        # Filtering chunks and corresponding images
+        valid_images = []
+        for idx, chunk in enumerate(transcript_chunks):
+            if len(chunk.split()) < 10:
+                continue
+
+            # Check for 'case' or 'patient' followed by number using the regex pattern
+            if pattern.search(chunk):
+                continue
+
+            if any(word in chunk.lower() for word in undesired_words):
+                continue
+
+            valid_chunks.append(chunk)
+            valid_images.append(images[idx])
+
+        processed_chunks = []
+        for chunk in valid_chunks:
+            full_prompt = f'''Prompt: "Generate a USMLE style medical school exam question based on the slide details provided:
+
+Clinically Relevant and Direct Content Extraction: Focus on crafting a question around the main theme or core information presented in the slide. Develop a clinically relevant scenario and ensure that the question, its answer choices, and its explanation are derived primarily from central concepts of the slide, focusing on mutations, imaging, histology, pathogenesis, anatomy/physiology, treatments, pharmacology, or clinical presentation.
+
+Deep Contextual Understanding: The question should resonate with the general theme and overarching message of the slide content. Both the question and answer choices should be based on the slide's primary material, ensuring that the correct answer is challenging but not overly obscure.
+
+Second-Order Thinking: The question should stimulate students to connect a clinical presentation to its underlying pathology, mechanism, or treatment. This connection should be based on major concepts in the slide, without leaning too heavily on minutiae.
+
+Subject Range: Depending on the slide, frame questions around broad topics such as mutations, imaging, histology, pathogenesis, anatomy/physiology, treatments, pharmacology, or clinical presentation.
+
+Consistency & Accuracy: Align the question, answer, and slide content cohesively. There should be only one unmistakably correct answer.
+
+Balanced Answer Choices: Maintain similar detail levels for all answer choices to prevent the correct answer from standing out due to detail disparity. Ensure answer choices are factually accurate and reflect the content of the slide. 
+
+Misconception-based Distractors: Integrate incorrect options that reflect common misconceptions, ensuring they are derived from or closely related to the slide's main content and ensuring they are not repetitive. Answer choices should be singular rather than asking to identify two components. 
+
+Answer Choices: Refrain from using aggregated choices like "all of the above." Each answer choice should be distinct.
+
+Format:
 
 Question: [Question]
 Answer Choices: [A-E]
-Correct answer: [correct answer]
-Explanation: [Explanation]
-
-Below please find an example of the style of question and explanation which should be asked:
-
-Example:
-
-Question:
-A 35-year-old woman presents with joint pain for 3 months. This started first in her right 1-3 MCPs, then developed consecutively in the left 2nd & 3rd MCPs and bilateral 4th and 5th MTPs. Pain is worse in the mornings, improves with use, and is associated with 1.5 hours of morning stiffness. Her exam shows swelling in the affected joints. What is the clinical pattern of her joint complaints?
-
-Answer Choices:
-A Acute non-inflammatory symmetric polyarthritis of small and large joints 
-B Chronic inflammatory symmetric polyarthritis of small joints 
-C Acute inflammatory asymmetric oligoarthritis of small joints 
-D Chronic non-inflammatory symmetric polyarthritis of small joints 
-E Chronic non-inflammatory symmetric oligoarthritis of small joints 
-
-Correct answer: B Chronic inflammatory symmetric polyarthritis of small joints
-
-Explanation: 
-This patient has a chronic presentation (> 6 weeks) of a symmetric (affects MCPs and MTPs on both sides of the body) polyarthritis (> 5 joints) affecting the small joints of the hands and feet (MCPs and MTPs). It is inflammatory since morning stiffness is > 1 hour. Therefore, option B is correct. She may have rheumatoid arthritis or one of its mimickers. Options D and E are incorrect due to the duration of morning stiffness. Duration of 3 months makes options A and C incorrect - acute is usually hours to days of symptoms at presentation. Options C and E are also incorrect due to the number of joints involved (oligoarthritis = 2-4 joints).
-
-Explanations should state why the correct response is correct, as well as the specific reason why the incorrect answers are incorrect. Avoid stating "These options are incorrect as they do not match the description" or other things of that nature"\nUploaded Material: {chunk}'''
+Correct Answer: [correct answer]
+Explanation: A well-rounded paragraph that explains the rationale behind the correct answer and provides succinct reasons for the incorrectness of each of the other choices."\nUploaded Material: {chunk}'''
 
             organized_chunk = process_text(full_prompt)
             processed_chunks.append(organized_chunk)
 
-        original_filename = os.path.basename(file_path).rsplit('.', 1)[0]  # Extract name without extension
+        original_filename = os.path.basename(file_path).rsplit('.', 1)[0]
         output_filename = f"{original_filename} practice questions.pptx"
-        generate_pptx(processed_chunks, transcript_chunks, file_path, output_filename)
+        generate_pptx(processed_chunks, valid_images, output_filename)
         return "File Saved"
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'pptx'}

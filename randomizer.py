@@ -154,6 +154,14 @@ def process_folder(folder_path):
     os.remove(merged_pdf_path)
 
 if __name__ == "__main__":
-    # Get the directory where the script is located
-    folder_path = os.path.dirname(os.path.abspath(__file__))
-    process_folder(folder_path)
+    try:
+        # Get the directory where the script is located
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        
+        # Change the working directory to the script directory
+        os.chdir(script_directory)
+        
+        process_folder(script_directory)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    input("Press Enter to close.")

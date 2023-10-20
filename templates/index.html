@@ -11,6 +11,12 @@
     <input type="file" id="pdfFile" accept="application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation" />
     <button id="uploadPdfBtn">Upload PDF</button>
     <br><br>
+    <select id="gptModelSelection">
+        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        <option value="gpt-4">GPT-4</option>
+        <option value="gpt-4-32k-0613">GPT-4 32K (Not available yet)</option>
+    </select>
+    <br><br>
     <textarea id="transcript" rows="10" cols="80" placeholder="Enter the lecture transcript"></textarea>
     <br><br>
     <textarea id="gptPrompt" rows="5" cols="80" placeholder="Enter the ChatGPT prompt"></textarea>
@@ -20,9 +26,32 @@
     <button id="practice-questions-btn">Generate Practice Questions</button>  <!-- New Button -->
     <h2>Processed Text:</h2>
     <div id="result"></div>
+    <h2>Price:</h2>
+    <p id="price"></p>
     <p id="status"></p> 
 
     <script>
+
+function calculatePrice(model, inputText, outputText) {
+    let pricePerInputToken, pricePerOutputToken;
+    
+    if (model === 'gpt-3.5-turbo') {
+        pricePerInputToken = 0.0015 / 1000;
+        pricePerOutputToken = 0.002 / 1000;
+    } else if (model === 'gpt-4') {
+        pricePerInputToken = 0.03 / 1000;
+        pricePerOutputToken = 0.06 / 1000;
+    } else {  // gpt-4-32k
+        pricePerInputToken = 0.06 / 1000;
+        pricePerOutputToken = 0.12 / 1000;
+    }
+
+    const inputTokens = inputText.split(' ').length;
+    const outputTokens = outputText.split(' ').length;
+    const price = (inputTokens + outputTokens) * (pricePerInputToken + pricePerOutputToken);
+
+    $('#price').text('$' + price.toFixed(2));
+}
         let isRecording = false;
 
         const startBtn = document.getElementById('startBtn');
@@ -81,16 +110,19 @@
             const transcript = $('#transcript').val();
             const gptPrompt = $('#gptPrompt').val();
             const fullPrompt = gptPrompt + "\n\n" + transcript;
+            const selectedModel = $('#gptModelSelection').val();  // Get the selected model from the dropdown
+
             $.ajax({
                 url: '{{ url_for("process_transcript") }}',
                 type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt}),
+                data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt, model: selectedModel}),
                 success: function(response) {
                     if (response.error) {
                         alert('Error processing transcript: ' + response.error);
                     } else {
                         $('#result').html(response.processed_text.replace(/\n/g, '<br>'));
+                        calculatePrice(selectedModel, fullPrompt, response.processed_text);  // Call function to calculate price
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
@@ -130,14 +162,17 @@
             });
         });
 
+
         // New AJAX call for generating practice questions
         $('#practice-questions-btn').on('click', function() {
             const transcript = $('#transcript').val();
+	    const selectedModel = $('#gptModelSelection').val(); 
+
             $.ajax({
                 url: '{{ url_for("process_practice_questions") }}',
                 type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({transcript: transcript}),
+                data: JSON.stringify({transcript: transcript, model: selectedModel}),
                 success: function(response) {
                     if (response.error) {
                         alert('Error generating practice questions: ' + response.error);

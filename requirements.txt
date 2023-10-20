@@ -1,14 +1,8 @@
-flask
-flask-cors
+Flask
+Flask-CORS
 openai
 PyPDF2
 python-pptx
 Werkzeug
 PyMuPDF
 Pillow
-os
-comtypes.client
-import PyPDF2
-random
-io
-time

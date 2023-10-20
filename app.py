@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your API key here"
+openai.api_key = "your_api_key_here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -126,6 +126,7 @@ DELAY_BETWEEN_RETRIES = 5  # Time delay in seconds between retries
 
 def process_text(full_prompt):
     retries = 0
+    selected_model = request.json["model"]
     while retries < MAX_RETRIES:
         try:
             system_message = {
@@ -138,7 +139,7 @@ def process_text(full_prompt):
             }
 
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model=selected_model,  # Use the selected_model parameter here
                 messages=[system_message, user_message],
                 max_tokens=2000,
                 n=1,
@@ -151,9 +152,6 @@ def process_text(full_prompt):
             retries += 1
             print(f"An error occurred: {e}. Retrying {retries}/{MAX_RETRIES}...")
             time.sleep(DELAY_BETWEEN_RETRIES)
-
-    # If the code reaches here, all retries have failed.
-    raise Exception(f"Failed to process text after {MAX_RETRIES} retries.")
 
 @app.route('/process_transcript', methods=['POST'])
 def process_transcript():
@@ -183,9 +181,9 @@ def process_practice_questions():
         transcript = request.json['transcript']
         transcript_chunks = split_text_by_separator(transcript)
 
-        undesired_words = ["outline", "objectives", "objective", "key", "take-home points", "take home", "takeaway","takeaways", "questions", "title", "abbreviations", "acronyms", "disclosure", "disclosures","case", "keyword", "points", "abbreviations/acronyms"]
+        undesired_words = ["outline", "objectives", "objective", "take-home points", "take home", "takeaway","takeaways", "questions", "title", "abbreviations", "acronyms", "disclosure", "disclosures","case", "keyword", "points", "abbreviations/acronyms", "acknowledgments", "overview"]
 
-        pattern = re.compile(r'\b(case|patient)\s*\d+\b', re.IGNORECASE)
+        pattern = re.compile(r'\b(case)\s*\d+\b', re.IGNORECASE)
 
         valid_chunks = []
         images = convert_pdf_to_images(file_path)
@@ -193,7 +191,7 @@ def process_practice_questions():
         # Filtering chunks and corresponding images
         valid_images = []
         for idx, chunk in enumerate(transcript_chunks):
-            if len(chunk.split()) < 10:
+            if len(chunk.split()) < 5:
                 continue
 
             # Check for 'case' or 'patient' followed by number using the regex pattern
@@ -267,17 +265,31 @@ def extract_text_from_pdf(file_path):
     return text
 
 # Modified function to include separator "$!$"
+
 def extract_text_from_pptx(file_path):
     text = ""
     prs = Presentation(file_path)
 
     for slide in prs.slides:
+        slide_text = ""
+        notes_text = ""
         for shape in slide.shapes:
             if shape.has_text_frame:
                 for paragraph in shape.text_frame.paragraphs:
                     for run in paragraph.runs:
-                        text += run.text + ' '
-        text += "$!$"  # Add the separator after each slide
+                        slide_text += run.text + ' '
+
+        if slide.has_notes_slide:
+            notes_slide = slide.notes_slide
+            for shape in notes_slide.shapes:
+                if shape.has_text_frame:
+                    for paragraph in shape.text_frame.paragraphs:
+                        for run in paragraph.runs:
+                            notes_text += run.text + ' '
+
+        # Combine slide text and notes text for the current slide, and add the separator
+        text += slide_text + ' ' + notes_text + "$!$"
+
     return text
 
 @app.route('/upload_file', methods=['POST'])

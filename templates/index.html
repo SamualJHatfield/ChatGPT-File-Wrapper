@@ -3,13 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Lecture Transcript Processor</title>
+    <title>MedSplorer</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        .flex-container {
+            display: flex;
+            align-items: center;
+        }
+        .flex-container > * {
+            margin-right: 10px;  /* Optional: for some spacing between the elements */
+        }
+    </style>
 </head>
 <body>
-    <h1>Medical Lecture Transcript Processor</h1>
+    <h1>MedSplorer</h1>
     <input type="file" id="pdfFile" accept="application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation" />
-    <button id="uploadPdfBtn">Upload PDF</button>
+    <button id="uploadPdfBtn">Upload File (PDF or PPT)</button>
     <br><br>
     <select id="gptModelSelection">
         <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
@@ -22,8 +31,18 @@
     <textarea id="gptPrompt" rows="5" cols="80" placeholder="Enter the ChatGPT prompt"></textarea>
     <button id="startBtn">Start Recording</button>
     <button id="stopBtn" disabled>Stop Recording</button>
-    <button id="process-btn">Process Transcript</button>
+    <div class="flex-container">
+        <button id="process-btn">Process Transcript</button>
+        <label for="processingMode">Processing Mode:</label>
+        <select id="processingMode">
+            <option value="bySlide">By Slide</option>
+            <option value="wholeFile">Whole File</option>
+        </select>
+    </div>
     <button id="practice-questions-btn">Generate Practice Questions</button>  <!-- New Button -->
+    <button id="prompt1-btn">Standard Prompt 1</button>
+    <button id="prompt2-btn">Standard Prompt 2</button>
+    <button id="prompt3-btn">Standard Prompt 3</button>
     <h2>Processed Text:</h2>
     <div id="result"></div>
     <h2>Price:</h2>
@@ -31,6 +50,11 @@
     <p id="status"></p> 
 
     <script>
+let transcriptText = '';
+const standardPrompt1 = "Please summarize the key points from the following medical lecture transcript:";
+const standardPrompt2 = "Please generate a set of practice questions based on the following medical lecture transcript:";
+const standardPrompt3 = "Please identify any potential inaccuracies or inconsistencies in the following medical lecture transcript:";
+
 
 function calculatePrice(model, inputText, outputText) {
     let pricePerInputToken, pricePerOutputToken;
@@ -106,61 +130,67 @@ function calculatePrice(model, inputText, outputText) {
             recognition.stop();
         });
 
-        $('#process-btn').on('click', function() {
-            const transcript = $('#transcript').val();
-            const gptPrompt = $('#gptPrompt').val();
-            const fullPrompt = gptPrompt + "\n\n" + transcript;
-            const selectedModel = $('#gptModelSelection').val();  // Get the selected model from the dropdown
+$('#process-btn').on('click', function() {
+    const transcript = $('#transcript').val();
+    const gptPrompt = $('#gptPrompt').val();
+    const selectedModel = $('#gptModelSelection').val();  // Get the selected model from the dropdown
+    const processingMode = $('#processingMode').val();  // Get the selected processing mode from the dropdown
 
-            $.ajax({
-                url: '{{ url_for("process_transcript") }}',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt, model: selectedModel}),
-                success: function(response) {
-                    if (response.error) {
-                        alert('Error processing transcript: ' + response.error);
-                    } else {
-                        $('#result').html(response.processed_text.replace(/\n/g, '<br>'));
-                        calculatePrice(selectedModel, fullPrompt, response.processed_text);  // Call function to calculate price
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    console.error('Error processing transcript:', textStatus, errorThrown);
-                    alert('Error processing transcript.');
-                }
-            });
-        });
-
-        $('#uploadPdfBtn').on('click', function() {
-            const pdfFile = document.getElementById('pdfFile').files[0];
-            if (!pdfFile) {
-                alert('Please select a PDF file to upload.');
-                return;
+    $.ajax({
+        url: '{{ url_for("process_transcript") }}',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt, model: selectedModel, processingMode: processingMode}),
+        success: function(response) {
+            if (response.error) {
+                alert('Error processing transcript: ' + response.error);
+            } else {
+                $('#result').html(response.processed_text.replace(/\n/g, '<br>'));
+                // ... rest of your success handler ...
             }
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error('Error processing transcript:', textStatus, errorThrown);
+            alert('Error processing transcript.');
+        }
+    });
+});
 
-            const formData = new FormData();
-            formData.append('file', pdfFile);
+$('#uploadPdfBtn').on('click', function() {
+    const pdfFile = document.getElementById('pdfFile').files[0];
+    if (!pdfFile) {
+        alert('Please select a PDF file to upload.');
+        return;
+    }
 
-            $.ajax({
-                url: '{{ url_for("upload_file") }}',
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    if (response.error) {
-                        alert('Error uploading PDF: ' + response.error);
-                    } else {
-                        $('#transcript').val(response.text);
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    console.error('Error uploading PDF:', textStatus, errorThrown);
-                    alert('Error uploading PDF.');
-                }
-            });
-        });
+    const formData = new FormData();
+    formData.append('file', pdfFile);
+
+    $.ajax({
+        url: '{{ url_for("upload_file") }}',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            if (response.error) {
+                alert('Error uploading PDF: ' + response.error);
+            } else {
+                transcriptText = response.text;  // Update transcriptText
+                $('#transcript').val(transcriptText);
+                updatePrice(transcriptText);  // Call updatePrice with transcriptText
+            }
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error('Error uploading PDF:', textStatus, errorThrown);
+            alert('Error uploading PDF.');
+        }
+    });
+});
+
+$('#gptModelSelection').on('change', function() {
+    updatePrice(transcriptText);  // Call updatePrice with transcriptText
+});
 
 
         // New AJAX call for generating practice questions
@@ -189,6 +219,55 @@ function calculatePrice(model, inputText, outputText) {
                     alert('Error generating practice questions.');
                 }
             });
+        });
+
+// Function to update the displayed price
+function updatePrice(transcriptText) {
+    const gptPrompt = $('#gptPrompt').val();
+    const selectedModel = $('#gptModelSelection').val();  // Get the selected model from the dropdown
+
+    // Estimate the total number of tokens in the file
+    const fileTokens = transcriptText.length / 4;
+
+    // Estimate the number of times a prompt will be called
+    const totalPages = (transcriptText.match(/\$\!\$/g) || []).length;
+    const totalPromptTokensInput = totalPages * 50;  // Lower estimate for input tokens per $!$
+    const totalPromptTokensOutput = totalPages * 100;  // Lower estimate for output tokens per $!$
+
+    // Lower and upper estimate for total input tokens
+    const totalInputTokensLower = fileTokens + totalPromptTokensInput;
+    const totalInputTokensUpper = fileTokens + totalPages * 100;  // Upper estimate for input tokens per $!$
+
+    // Lower and upper estimate for total output tokens
+    const totalOutputTokensLower = totalPromptTokensOutput;
+    const totalOutputTokensUpper = totalPages * 250;  // Upper estimate for output tokens per $!$
+
+    // Lower and upper estimate for price
+    const priceLower = (totalInputTokensLower + totalOutputTokensLower) * getTokenPrice(selectedModel);
+    const priceUpper = (totalInputTokensUpper + totalOutputTokensUpper) * getTokenPrice(selectedModel);
+
+    $('#price').text('$' + priceLower.toFixed(2) + ' - $' + priceUpper.toFixed(2));
+}
+
+// Function to get the price per token based on the model
+function getTokenPrice(model) {
+    if (model === 'gpt-3.5-turbo') {
+        return (0.0015 + 0.002) / 1000;
+    } else if (model === 'gpt-4') {
+        return (0.03 + 0.06) / 1000;
+    } else {  // gpt-4-32k
+        return (0.06 + 0.12) / 1000;
+    }
+}
+
+        $('#prompt1-btn').on('click', function() {
+            $('#gptPrompt').val(standardPrompt1);
+        });
+        $('#prompt2-btn').on('click', function() {
+            $('#gptPrompt').val(standardPrompt2);
+        });
+        $('#prompt3-btn').on('click', function() {
+            $('#gptPrompt').val(standardPrompt3);
         });
 
     </script>

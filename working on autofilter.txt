@@ -12,13 +12,22 @@ import time
 import fitz  # Import PyMuPDF
 import io
 from PIL import Image
+from functools import lru_cache
+import concurrent.futures
+import spacy
+from spacy.tokens import Token
+import nltk
+from nltk.tokenize import sent_tokenize
 
 global file_path
+# Loading a medium-sized spaCy model
+nlp = spacy.load('en_core_web_md')
+nltk.download('punkt')
 
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your api key here"
+openai.api_key = "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"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -186,63 +195,93 @@ def process_transcript():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+def similarity(word1, word2):
+    token1 = nlp(word1)
+    token2 = nlp(word2)
+    return token1.similarity(token2)
+
+# Function to determine if a slide is relevant based on semantic similarity
+def is_relevant_slide(chunk, undesired_words):
+    chunk_tokens = nlp(chunk.lower())
+    for token in chunk_tokens:
+        for undesired in undesired_words:
+            if similarity(token.text, undesired) > 0.85:  # Threshold, can be adjusted
+                return False
+    return True
+
+# Function to determine if a slide is primarily composed of questions
+def is_question_slide(chunk):
+    sentences = sent_tokenize(chunk)
+    question_count = sum(1 for sentence in sentences if sentence.strip().endswith('?'))
+    return question_count / len(sentences) > 0.75  # Adjust the threshold as necessary
+
 @app.route('/process_practice_questions', methods=['POST'])
 def process_practice_questions():
     try:
         transcript = request.json['transcript']
         transcript_chunks = split_text_by_separator(transcript)
 
-        undesired_words = ["outline", "objectives", "objective", "take-home points", "take home", "takeaway","takeaways", "questions", "title", "abbreviations", "acronyms", "disclosure", "disclosures","case", "keyword", "points", "abbreviations/acronyms", "acknowledgments", "overview"]
+        undesired_words = [
+    "outline",               # General term
+    "objectives?",           # Captures 'objective' and 'objectives'
+    "take[-\s]?home",        # Captures 'take-home points', 'take home'
+    "takeaways?",            # Captures 'takeaway' and 'takeaways'
+    "questions",             # General term
+    "title",                 # General term
+    "abbreviations?",        # Captures 'abbreviation' and 'abbreviations'
+    "acronyms?",             # Captures 'acronym' and 'acronyms'
+    "disclosures?", "disclosure"          # Captures 'disclosure' and 'disclosures'
+    "case",                  # General term
+    "keyword",               # General term
+    "points",                # General term
+    "acknowledgments",       # General term
+    "overview"               # General term
+]
 
         pattern = re.compile(r'\b(case)\s*\d+\b', re.IGNORECASE)
 
         valid_chunks = []
+        valid_images = []
         images = convert_pdf_to_images(file_path)
 
-        # Filtering chunks and corresponding images
-        valid_images = []
-        for idx, chunk in enumerate(transcript_chunks):
+        # Function to process each chunk
+        def process_chunk(idx, chunk):
             if len(chunk.split()) < 5:
-                continue
+                return None, None
 
-            # Check for 'case' or 'patient' followed by number using the regex pattern
-            if pattern.search(chunk):
-                continue
+            if pattern.search(chunk) or is_question_slide(chunk) or not is_relevant_slide(chunk, undesired_words):
+                return None, None
 
-            if any(word in chunk.lower() for word in undesired_words):
-                continue
+            return chunk, images[idx]
 
-            valid_chunks.append(chunk)
-            valid_images.append(images[idx])
+        # Applying parallel processing for each chunk
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_chunk, idx, chunk) for idx, chunk in enumerate(transcript_chunks)]
+            for future in concurrent.futures.as_completed(futures):
+                chunk, image = future.result()
+                if chunk and image:
+                    valid_chunks.append(chunk)
+                    valid_images.append(image)
 
         processed_chunks = []
         for chunk in valid_chunks:
             full_prompt = f'''Prompt: "Generate a USMLE style medical school exam question based on the slide details provided:
 
-Clinically Relevant and Direct Content Extraction: Focus on crafting a question around the main theme or core information presented in the slide. Develop a clinically relevant scenario and ensure that the question, its answer choices, and its explanation are derived primarily from central concepts of the slide, focusing on mutations, imaging, histology, pathogenesis, anatomy/physiology, treatments, pharmacology, or clinical presentation.
+Comprehensiveness & Content Relevance: Create a question that is comprehensive, focused on the main clinical theme or core information of the slide. Ensure the question is rich in clinically pertinent content, emphasizing mutations, imaging, histology, pathogenesis, anatomy/physiology, treatments, pharmacology, or clinical presentation.
 
-Deep Contextual Understanding: The question should resonate with the general theme and overarching message of the slide content. Both the question and answer choices should be based on the slide's primary material, ensuring that the correct answer is challenging but not overly obscure. Avoid explicitly providing a diagnosis, rather focusing on clinical presentation within the question stem.
+Contextual Depth: Craft questions that resonate deeply with the overarching message of the slide, incorporating a variety of clinical scenarios. Ensure questions are not overly obscure or reliant on minutiae.
 
-Second-Order Thinking: The question should stimulate students to connect a clinical presentation to its underlying pathology, mechanism, or treatment. This connection should be based on major concepts in the slide, without leaning too heavily on minutiae.
+Cognitive Stimulation: Develop questions that foster second-order thinking, prompting students to connect clinical presentations to underlying pathology or mechanisms based on the slide’s major concepts.
 
-Subject Range: Depending on the slide, frame questions around broad topics such as mutations, imaging, histology, pathogenesis, anatomy/physiology, treatments, pharmacology, or clinical presentation.
+Answer Choices & Distractors: Create balanced and plausible distractors that reflect common misconceptions or are closely related to the slide’s content. Avoid aggregated choices like "all of the above," and ensure each choice is distinct and relevant.
 
-Consistency & Accuracy: Align the question, answer, and slide content cohesively. There should be only one unmistakably correct answer.
+Format & Explanation: Structure the output with a clear question, answer choices (A-E), a correct answer, and a well-rounded explanation that provides detailed reasoning for each choice.
 
-Balanced Answer Choices: Maintain similar detail levels for all answer choices to prevent the correct answer from standing out due to detail disparity. Ensure answer choices are factually accurate and reflect the content of the slide. 
-
-Misconception-based Distractors: Integrate incorrect options that reflect common misconceptions, ensuring they are derived from or closely related to the slide's main content and ensuring they are not repetitive. Answer choices should be singular rather than asking to identify two components. 
-
-Caution on Comparative Questions: If the question involves comparing or prioritizing different factors (e.g., highest risk, most significant factor, next best step), ensure that the slide content provides explicit information to support the comparison or hierarchy. Avoid making unsupported inferences or assumptions that are not directly based on the slide content.
-
-Answer Choices: Refrain from using aggregated choices like "all of the above." Each answer choice should be distinct. Avoid explicitly asking for a diagnosis. Answer choices must require second order thought process while still relying explictly on factual information provided within the slide
-
-Format:
-
+Example Format:
 Question: [Question]
 Answer Choices: [A-E]
 Correct Answer: [correct answer]
-Explanation: A well-rounded paragraph that explains the rationale behind the correct answer and provides succinct reasons for the incorrectness of each of the other choices."\nUploaded Material: {chunk}'''
+Explanation: A comprehensive paragraph detailing the rationale behind each answer choice based on the slide’s content."\nUploaded Material: {chunk}'''
 
             organized_chunk = process_text(full_prompt)
             processed_chunks.append(organized_chunk)

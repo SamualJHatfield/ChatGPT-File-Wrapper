@@ -27,7 +27,7 @@ nltk.download('punkt')
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "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"
+openai.api_key = "Your API key here"
 
 
 def split_text_by_separator(text, separator="$!$"):

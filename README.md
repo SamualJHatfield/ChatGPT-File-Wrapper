@@ -11,12 +11,6 @@ Windows - Right click on "requirements.txt" file, select "Copy as path"
           type 'pip install -r [paste path]'
                  It should look like 'pip install -r "C:\Users\xxxxx\Desktop\ChatGPT-File-Wrapper\requirements.txt" ' 
                  Press enter and let all installations progress
-Mac - Mac Instructions: Hold down the Option key, right-click the requirements.txt file, and select “Copy (file name) as Pathname”.
-      Open the Terminal Applications > Utilities > Terminal, or you can use Spotlight by pressing Command (⌘) + Space and typing "Terminal".
-      type pip install -r (ensure there's a space after -r).
-      paste the path that you copied earlier.
-               It should look like "pip3 install -r /xxx/ChatGPT-File-Wrapper/requirements.txt"
-               Press Enter and let installations progress
 7) After all packages are installed, double click the "app.py" folder and the app will launch.
 8) Open the http address at the top of the black box, either by clicking on it or pasting it into any browser (ie. http://127.0.0.1:5000)
 9) Ensure the black box is still open (it will provide error messages, etc.)

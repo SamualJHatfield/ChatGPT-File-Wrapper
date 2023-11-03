@@ -18,7 +18,7 @@ global file_path
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = "your api key here"
+openai.api_key = "Your api key here"
 
 
 def split_text_by_separator(text, separator="$!$"):
@@ -141,7 +141,7 @@ def process_text(full_prompt):
             response = openai.ChatCompletion.create(
                 model=selected_model,  # Use the selected_model parameter here
                 messages=[system_message, user_message],
-                max_tokens=2000,
+                max_tokens=round(7500-len(full_prompt)/4),
                 n=1,
                 stop=None,
                 temperature=0.5,
@@ -158,7 +158,28 @@ def process_transcript():
     try:
         transcript = request.json['transcript']
         prompt = request.json['gptPrompt']
-        processing_mode = request.json['processingMode']  # Get processing mode from request
+        processing_mode = request.json['processingMode']
+        page_content = request.json['pageContent']
+
+        def split_text_by_pagecontent(text, page_content):
+            separator = "$!$"
+            chunks = []
+            start_idx = 0
+            
+            while True:
+                page_idx = text.find(page_content, start_idx)
+                if page_idx == -1:
+                    break
+                
+                separator_idx = text.find(separator, page_idx + len(page_content))
+                if separator_idx != -1:
+                    chunks.append(text[start_idx:separator_idx])
+                    start_idx = separator_idx + len(separator)
+                else:
+                    chunks.append(text[start_idx:])
+                    break
+
+            return chunks
 
         if processing_mode == 'bySlide':
             # Split transcript by separator "$!$" if "bySlide" is selected
@@ -173,12 +194,18 @@ def process_transcript():
 
             organized_text = ' '.join(processed_chunks)
         elif processing_mode == 'wholeFile':
-            # Ignore separators and process the entire file if "wholeFile" is selected
-            full_prompt = f"\n\nPrompt: {prompt}\n\nUploaded Material:\n\n{transcript}"
+            transcript_chunks = split_text_by_pagecontent(transcript, page_content)
 
-            organized_text = process_text(full_prompt)
+            processed_chunks = []
+            for chunk in transcript_chunks:
+                full_prompt = f"\n\nPrompt: {prompt}\n\nUploaded Material:\n\n{chunk}"
+                organized_chunk = process_text(full_prompt)
+                processed_chunks.append(organized_chunk)
+
+            organized_text = ' '.join(processed_chunks)
+
         else:
-            raise ValueError(f"Unknown processing mode: {processing_mode}")
+            return jsonify({"error": "Invalid processing mode."}), 400
 
         result = {"processed_text": organized_text}
         return jsonify(result)
@@ -192,10 +219,9 @@ def process_practice_questions():
         transcript = request.json['transcript']
         transcript_chunks = split_text_by_separator(transcript)
 
-        undesired_words = ["outline", "objectives", "objective", "take-home points", "take home", "takeaway","takeaways", "questions", "title", "abbreviations", "acronyms", "disclosure", "disclosures","case", "keyword", "points", "abbreviations/acronyms", "acknowledgments", "overview"]
+        undesired_words = []
 
-        pattern = re.compile(r'\b(case)\s*\d+\b', re.IGNORECASE)
-
+        
         valid_chunks = []
         images = convert_pdf_to_images(file_path)
 
@@ -203,10 +229,6 @@ def process_practice_questions():
         valid_images = []
         for idx, chunk in enumerate(transcript_chunks):
             if len(chunk.split()) < 5:
-                continue
-
-            # Check for 'case' or 'patient' followed by number using the regex pattern
-            if pattern.search(chunk):
                 continue
 
             if any(word in chunk.lower() for word in undesired_words):

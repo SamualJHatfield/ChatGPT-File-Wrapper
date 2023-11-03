@@ -38,10 +38,12 @@
             <option value="bySlide">By Slide</option>
             <option value="wholeFile">Whole File</option>
         </select>
+        <label for="pageContent">Page Content:</label> <!-- Moved next to the dropdown -->
+        <input type="text" id="pageContent" /> <!-- Moved next to the dropdown -->
     </div>
     <button id="practice-questions-btn">Generate Practice Questions</button>  <!-- New Button -->
-    <button id="prompt1-btn">Standard Prompt 1</button>
-    <button id="prompt2-btn">Standard Prompt 2</button>
+    <button id="prompt1-btn">Clinical Vignettes</button>
+    <button id="prompt2-btn">Summarize</button>
     <button id="prompt3-btn">Standard Prompt 3</button>
     <h2>Processed Text:</h2>
     <div id="result"></div>
@@ -51,9 +53,45 @@
 
     <script>
 let transcriptText = '';
-const standardPrompt1 = "Please summarize the key points from the following medical lecture transcript:";
-const standardPrompt2 = "Please generate a set of practice questions based on the following medical lecture transcript:";
-const standardPrompt3 = "Please identify any potential inaccuracies or inconsistencies in the following medical lecture transcript:";
+const standardPrompt1 = `Create three unique, novel, distinct clinical vignettes utilizing solely the provided lecture material, ensuring each vignette is accurate and faithful to lecture content. Each vignette should embody diversity in patient demographics, medical histories, and clinical presentations, providing a comprehensive exploration of the lecture topics. Each vignette should be followed by three questions.
+
+Format of your response:
+Vignette 1:[Vignette]
+Questions
+Vignette 2: [Vignette]
+Questions
+Vignette 3: [Vignette]
+Questions
+
+Vignette Format:
+HPI: Craft a nuanced patient presentation with meticulous details such as medical history, comorbidities, medications, and lifestyle factors. HPI should be in the form of a paragraph
+Physical exam findings: Integrate a range of symptoms, clinical presentation, findings that resonate with the lecture’s key topics, readying each vignette for thorough analysis and discussion.
+(optional)Laboratory/Imaging findings: Incorporate findings from relevant diagnostic procedures or tests that align precisely with the lecture’s emphasized topics and complications.
+
+Guidelines for the Three Multiple Choice Questions:
+
+*Questions require a multifaceted application of the lecture material, focusing on clinical presentation, diagnostic findings, and detailed medical history.
+*Questions emphasize management approaches, prognostic considerations, and potential complications.
+*The answer choices avoid asking for a singular specific diagnosis and refrain from using combined options such as "all of the above" or "both A and B."
+
+Format for the questions:
+
+Question: [Craft the question here]
+Answer Choices: [List options A-E here]
+Correct Answer: [Indicate the correct option here]
+Explanation: Provide a comprehensive rationale, ensuring fidelity to the lecture material. Explain both the correct and the incorrect answer. 
+
+Overall Guidelines to Uphold:
+
+Maintain alignment with the lecture material, ensuring relevancy and applicability.
+Preserve the integrity and accuracy of the information within the vignettes, questions, and answer choices.
+Emphasize the clinical relevance, ensuring each element serves as a potent educational tool in a medical context.
+Structure the questions to predominantly mimic the style of USMLE Step 2 CK questions, ensuring each aspect is strictly derived and consistent with the lecture material.
+`;
+
+const standardPrompt2 = `Given the following lecture slide content, extract key details into succinct bullet points using '*' for main points and '-->' for sub-points. Ensure preservation of key concepts, statistics, facts, and vital information. Summarize and structure the following concisely:`;
+
+const standardPrompt3 = `Please identify any potential inaccuracies or inconsistencies in the following medical lecture transcript:`;
 
 
 function calculatePrice(model, inputText, outputText) {
@@ -135,12 +173,13 @@ $('#process-btn').on('click', function() {
     const gptPrompt = $('#gptPrompt').val();
     const selectedModel = $('#gptModelSelection').val();  // Get the selected model from the dropdown
     const processingMode = $('#processingMode').val();  // Get the selected processing mode from the dropdown
+    const pageContent = $('#pageContent').val();  // Get the value from the pageContent input field
 
     $.ajax({
         url: '{{ url_for("process_transcript") }}',
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt, model: selectedModel, processingMode: processingMode}),
+        data: JSON.stringify({transcript: transcript, gptPrompt: gptPrompt, model: selectedModel, processingMode: processingMode, pageContent: pageContent}),
         success: function(response) {
             if (response.error) {
                 alert('Error processing transcript: ' + response.error);
@@ -273,4 +312,3 @@ function getTokenPrice(model) {
     </script>
 </body>
 </html>
-
